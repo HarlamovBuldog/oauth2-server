@@ -2,9 +2,10 @@ package handler
 
 import (
 	"fmt"
-	"github.com/dgrijalva/jwt-go"
 	"net/http"
 	"strings"
+
+	"github.com/dgrijalva/jwt-go"
 )
 
 func (h *Handler) validateTokenMiddleware(next http.Handler) http.Handler {

@@ -3,10 +3,13 @@ package handler
 import (
 	"crypto/rsa"
 	"encoding/json"
-	"github.com/dgrijalva/jwt-go"
 	"net/http"
 	"os"
 	"time"
+
+	"oauth2-server/internal/config"
+
+	"github.com/dgrijalva/jwt-go"
 )
 
 var (
@@ -36,12 +39,16 @@ func init() {
 }
 
 type Handler struct {
-	mux *http.ServeMux
+	mux          *http.ServeMux
+	clientID     string
+	clientSecret string
 }
 
-func New() *Handler {
+func New(cfg config.Config) *Handler {
 	return &Handler{
-		mux: http.NewServeMux(),
+		mux:          http.NewServeMux(),
+		clientID:     cfg.ClientID,
+		clientSecret: cfg.ClientSecret,
 	}
 }
 
@@ -62,7 +69,7 @@ type TokenResponse struct {
 func (h *Handler) generateToken(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	clientID, clientSecret, ok := r.BasicAuth()
-	if !ok || clientID != "client-id" || clientSecret != "client-secret" {
+	if !ok || clientID != h.clientID || clientSecret != h.clientSecret {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}

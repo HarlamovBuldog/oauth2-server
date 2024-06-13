@@ -3,27 +3,20 @@ package main
 import (
 	"log"
 	"net/http"
-	"os"
 	"time"
 
-	"github.com/joho/godotenv"
+	"oauth2-server/internal/config"
+
 	"oauth2-server/internal/handler"
 )
 
 func main() {
-	err := godotenv.Load()
+	cfg, err := config.Load()
 	if err != nil {
-		panic("Error loading .env file")
+		panic("error loading config: " + err.Error())
 	}
 
-	clientID := os.Getenv("CLIENT_ID")
-	clientSecret := os.Getenv("CLIENT_SECRET")
-
-	if clientID == "" || clientSecret == "" {
-		panic("Client ID or Client Secret not set in .env file")
-	}
-
-	h := handler.New()
+	h := handler.New(*cfg)
 
 	server := &http.Server{
 		Addr:           ":8080",
