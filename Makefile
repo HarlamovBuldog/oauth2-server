@@ -5,6 +5,6 @@ public-key:
 run-local:
 	go run cmd/oauth2-server/main.go
 docker-build:
-	docker build -t oauth2-server .
+	docker build -t oauth2-server:0.0.1 .
 docker-run:
-	docker run --rm oauth2-server
+	docker run --rm -p 8080:8080 oauth2-server:0.0.1

@@ -3,8 +3,8 @@ package handler
 import (
 	"crypto/rsa"
 	"encoding/json"
+	"log"
 	"net/http"
-	"os"
 	"time"
 
 	"oauth2-server/internal/config"
@@ -12,52 +12,15 @@ import (
 	"github.com/dgrijalva/jwt-go"
 )
 
-var (
-	privateKey *rsa.PrivateKey
-	publicKey  *rsa.PublicKey
-)
-
-func init() {
-	privateKeyData, err := os.ReadFile("private.key")
-	if err != nil {
-		panic(err)
-	}
-
-	privateKey, err = jwt.ParseRSAPrivateKeyFromPEM(privateKeyData)
-	if err != nil {
-		panic(err)
-	}
-
-	publicKeyData, err := os.ReadFile("public.key")
-	if err != nil {
-		panic(err)
-	}
-	publicKey, err = jwt.ParseRSAPublicKeyFromPEM(publicKeyData)
-	if err != nil {
-		panic(err)
-	}
-}
-
 type Handler struct {
-	mux          *http.ServeMux
-	clientID     string
-	clientSecret string
+	clientID      string
+	clientSecret  string
+	rsaPublicKey  *rsa.PublicKey
+	rsaPrivateKey *rsa.PrivateKey
 }
 
-func New(cfg config.Config) *Handler {
-	return &Handler{
-		mux:          http.NewServeMux(),
-		clientID:     cfg.ClientID,
-		clientSecret: cfg.ClientSecret,
-	}
-}
-
-func (h *Handler) Routes() http.Handler {
-	h.mux.HandleFunc("POST /token", h.generateToken)
-	protectedEndpointHandler := http.HandlerFunc(h.protectedEndpoint)
-	h.mux.Handle("GET /protected", h.validateTokenMiddleware(protectedEndpointHandler))
-
-	return h.mux
+type ProtectedResponse struct {
+	Message string `json:"message"`
 }
 
 type TokenResponse struct {
@@ -66,11 +29,34 @@ type TokenResponse struct {
 	ExpiresIn   int64  `json:"expires_in"`
 }
 
+func New(cfg config.Config, rsaPublicKey *rsa.PublicKey, rsaPrivateKey *rsa.PrivateKey) *Handler {
+	return &Handler{
+		clientID:      cfg.ClientID,
+		clientSecret:  cfg.ClientSecret,
+		rsaPublicKey:  rsaPublicKey,
+		rsaPrivateKey: rsaPrivateKey,
+	}
+}
+
+func (h *Handler) Routes() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /token", h.generateToken)
+	protectedEndpointHandler := http.HandlerFunc(h.protectedEndpoint)
+	mux.Handle("GET /protected", h.validateTokenMiddleware(protectedEndpointHandler))
+
+	return mux
+}
+
 func (h *Handler) generateToken(w http.ResponseWriter, r *http.Request) {
-	r.ParseForm()
+	if err := r.ParseForm(); err != nil {
+		handleError(w, http.StatusBadRequest, "invalid request")
+
+		return
+	}
 	clientID, clientSecret, ok := r.BasicAuth()
 	if !ok || clientID != h.clientID || clientSecret != h.clientSecret {
-		w.WriteHeader(http.StatusUnauthorized)
+		handleError(w, http.StatusUnauthorized, "invalid credentials")
+
 		return
 	}
 
@@ -80,9 +66,10 @@ func (h *Handler) generateToken(w http.ResponseWriter, r *http.Request) {
 		"exp": time.Now().Add(time.Hour).Unix(),
 	})
 
-	tokenString, err := token.SignedString(privateKey)
+	tokenString, err := token.SignedString(h.rsaPrivateKey)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		handleError(w, http.StatusInternalServerError, err.Error())
+
 		return
 	}
 
@@ -91,15 +78,28 @@ func (h *Handler) generateToken(w http.ResponseWriter, r *http.Request) {
 		TokenType:   "Bearer",
 		ExpiresIn:   3600,
 	}
+
 	w.Header().Set("Content-Type", "application/json")
-	encoder := json.NewEncoder(w)
-	encoder.SetIndent("", "\n")
-	if err := encoder.Encode(response); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		handleError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 }
 
-func (h *Handler) protectedEndpoint(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("This is a protected endpoint"))
+func (h *Handler) protectedEndpoint(w http.ResponseWriter, _ *http.Request) {
+	msg := ProtectedResponse{
+		Message: "This is a protected endpoint",
+	}
+	resp, err := json.Marshal(&msg)
+	if err != nil {
+		log.Printf("protected Marshal error: %v\n", err)
+
+		handleError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(resp)
 }

@@ -23,7 +23,7 @@ func Load() (*Config, error) {
 	clientSecret := os.Getenv("CLIENT_SECRET")
 
 	if clientID == "" || clientSecret == "" {
-		return nil, errors.New("Client ID or Client Secret not set in .env file")
+		return nil, errors.New("client ID or client secret not set in .env file")
 	}
 
 	return &Config{
