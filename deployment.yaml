@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oauth2-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: oauth2-server
+  template:
+    metadata:
+      labels:
+        app: oauth2-server
+    spec:
+      containers:
+        - name: oauth2-server
+          image: oauth2-server
+          ports:
+            - containerPort: 8080
+          env:
+            - name: CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: oauth2-server-secret
+                  key: client-id
+            - name: CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: oauth2-server-secret
+                  key: client-secret
+          volumeMounts:
+            - name: keys
+              mountPath: /keys
+      volumes:
+        - name: keys
+          secret:
+            secretName: oauth2-server-keys
